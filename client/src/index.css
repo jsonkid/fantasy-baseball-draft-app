@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+@theme {
+  /* Typography */
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  /* Surface palette */
+  --color-surface:      #0f1117;   /* page background */
+  --color-card:         #161b27;   /* tables, cards */
+  --color-card-alt:     #1a2030;   /* alternating table rows / header */
+  --color-border:       #252c3d;   /* subtle borders */
+  --color-border-light: #1e2638;   /* very subtle separators */
+
+  /* Text */
+  --color-ink:          #e8eaf2;   /* primary text */
+  --color-ink-muted:    #8b91a8;   /* secondary labels */
+  --color-ink-faint:    #505775;   /* tertiary / disabled */
+
+  /* Accent — amber, used only for primary CTA & active states */
+  --color-accent:       #f59e0b;
+  --color-accent-dim:   #78490a;   /* accent background tint */
+
+  /* Value indicators (muted, readable on dark bg) */
+  --color-pos:          #34d399;   /* emerald-400 — positive */
+  --color-neg:          #fb7185;   /* rose-400 — negative */
+  --color-warn:         #fbbf24;   /* amber-300 — neutral/caution */
+}
+
+/* Base layer */
+body {
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+}

@@ -1,0 +1,10 @@
+node_modules/
+client/node_modules/
+client/dist/
+
+data/
+server/config.json
+server/draft_state.json
+
+.DS_Store
+.claude/
