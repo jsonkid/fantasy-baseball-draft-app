@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { useDraft } from '../context/DraftContext';
 import { STAT_CATEGORIES } from '../utils/standingsCalc';
 import SortTh from './SortTh';
+import { getPlayersForPosition, findPositionBreakpoints } from './Scarcity';
+import { ROSTER_POSITIONS } from '../utils/positions';
 
 // 7-step value label: 3 overvalued + neutral + 3 undervalued, opacity increases away from neutral.
 // Returns { label, bg } or null for neutral.
@@ -130,15 +132,44 @@ function DraftModal({ player, onClose }) {
 
 // ── PlayerPool ─────────────────────────────────────────────────────────────
 
-export default function PlayerPool() {
+export default function PlayerPool({ tierFilter, onClearTierFilter }) {
   const {
-    hitters, pitchers, draftedPlayerIds, picks,
+    config, hitters, pitchers, draftedPlayerIds, picks,
     undoLastPick,
     searchTerm, positionFilter, typeFilter, sortColumn, sortDirection,
     dispatch,
   } = useDraft();
 
   const [draftTarget, setDraftTarget] = useState(null);
+  const [showDrafted, setShowDrafted] = useState(false);
+
+  const picksMap = useMemo(() => {
+    const map = new Map();
+    picks.forEach(p => map.set(p.playerId, p));
+    return map;
+  }, [picks]);
+
+  // Compute per-position tiers using the same algorithm as the Position Overview,
+  // so badges match. Each player gets the tier from their first ROSTER_POSITION.
+  const tierMap = useMemo(() => {
+    if (!config) return new Map();
+    const allPlayers = [...hitters, ...pitchers];
+    const map = new Map();
+    for (const pos of ROSTER_POSITIONS) {
+      const threshold = config.numTeams * (config.rosterSlots[pos] || 0);
+      if (threshold === 0) continue;
+      const posPlayers = getPlayersForPosition(allPlayers, pos);
+      const sorted = [...posPlayers].sort((a, b) => b.Dollars - a.Dollars).slice(0, threshold);
+      if (sorted.length < 2) continue;
+      const breakpoints = findPositionBreakpoints(sorted);
+      for (const p of sorted) {
+        if (!map.has(p.PlayerId)) {
+          map.set(p.PlayerId, breakpoints.filter(bp => p.Dollars <= bp).length);
+        }
+      }
+    }
+    return map;
+  }, [hitters, pitchers, config]);
 
   // Rank all players by Dollars descending (stable — from full pool, not filtered).
   // Deduplicate by PlayerId first (e.g. two-way players appear in both lists) keeping
@@ -161,11 +192,21 @@ export default function PlayerPool() {
   const statCols = [...(showHitterCols ? HITTER_STAT_COLS : []), ...(showPitcherCols ? PITCHER_STAT_COLS : [])];
 
   const availablePlayers = useMemo(() => {
-    let players = [...hitters, ...pitchers].filter(p => !draftedPlayerIds.has(p.PlayerId));
+    let players = showDrafted
+      ? [...hitters, ...pitchers]
+      : [...hitters, ...pitchers].filter(p => !draftedPlayerIds.has(p.PlayerId));
 
     if (typeFilter === 'batters') players = players.filter(p => p.type === 'hitter');
     if (typeFilter === 'pitchers') players = players.filter(p => p.type === 'pitcher');
     if (positionFilter !== 'ALL') players = players.filter(p => p.positions.includes(positionFilter));
+
+    if (tierFilter) {
+      players = players.filter(p =>
+        p.positions.includes(tierFilter.pos) &&
+        (tierFilter.maxDollars === Infinity || p.Dollars <= tierFilter.maxDollars) &&
+        (tierFilter.minDollars === -Infinity || p.Dollars > tierFilter.minDollars)
+      );
+    }
 
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
@@ -185,7 +226,7 @@ export default function PlayerPool() {
     });
 
     return players;
-  }, [hitters, pitchers, draftedPlayerIds, typeFilter, positionFilter, searchTerm, sortColumn, sortDirection]);
+  }, [hitters, pitchers, draftedPlayerIds, showDrafted, typeFilter, positionFilter, searchTerm, sortColumn, sortDirection, tierFilter]);
 
   const lastPick = picks[picks.length - 1];
 
@@ -201,7 +242,7 @@ export default function PlayerPool() {
     <div>
       {draftTarget && <DraftModal player={draftTarget} onClose={() => setDraftTarget(null)} />}
 
-      <h2 className="text-lg font-semibold mb-3 text-ink">Available Players</h2>
+      <h2 className="text-lg font-semibold mb-3 text-ink">Players</h2>
 
       {/* Controls bar */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -237,7 +278,28 @@ export default function PlayerPool() {
             <option key={p} value={p}>{p === 'ALL' ? 'All positions' : p}</option>
           ))}
         </select>
-        <span className="text-sm text-ink-muted ml-auto">{availablePlayers.length} available</span>
+        <select
+          className="border border-border bg-card text-ink rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+          value={showDrafted ? 'all' : 'available'}
+          onChange={e => setShowDrafted(e.target.value === 'all')}
+        >
+          <option value="available">Available only</option>
+          <option value="all">Show drafted</option>
+        </select>
+        {tierFilter && (
+          <button
+            onClick={onClearTierFilter}
+            className="flex items-center gap-1.5 text-sm border border-border bg-card-alt text-ink px-3 py-1.5 rounded-lg hover:bg-[#1e2a3a] transition-colors"
+          >
+            <span className="font-mono font-medium">{tierFilter.pos} · Tier {tierFilter.tierIndex + 1}</span>
+            <span className="text-ink-faint">✕</span>
+          </button>
+        )}
+        <span className="text-sm text-ink-muted ml-auto">
+          {showDrafted
+            ? `${availablePlayers.filter(p => draftedPlayerIds.has(p.PlayerId)).length} drafted · ${availablePlayers.filter(p => !draftedPlayerIds.has(p.PlayerId)).length} available`
+            : `${availablePlayers.length} available`}
+        </span>
         {lastPick && (
           <button
             onClick={undoLastPick}
@@ -257,17 +319,23 @@ export default function PlayerPool() {
               <Th col="Name" label="Name" left />
               <Th col="Team" label="Team" left />
               <th className="px-2 py-2 text-left text-xs font-medium text-ink-faint uppercase tracking-wide">POS</th>
-              <Th col="Dollars" label="$" />
+              <Th col="Dollars" label="Proj $" />
+              {showDrafted && <th className="px-2 py-2 text-right text-xs font-medium text-ink-faint uppercase tracking-wide">Paid</th>}
               <th className="px-2 py-2 text-left text-xs font-medium text-ink-faint uppercase tracking-wide">Value</th>
               {statCols.map(c => <Th key={c.key} col={c.key} label={c.label} />)}
               <th className="px-2 py-2"></th>
             </tr>
           </thead>
           <tbody>
-            {availablePlayers.map((player, i) => (
+            {availablePlayers.map((player, i) => {
+              const isDrafted = draftedPlayerIds.has(player.PlayerId);
+              return (
               <tr
                 key={player.PlayerId}
-                className={`border-b border-border-light hover:bg-[#1e2a3a] transition-colors ${i % 2 === 1 ? 'bg-card-alt' : 'bg-card'}`}
+                className="border-b border-border-light transition-colors"
+                style={isDrafted
+                  ? { backgroundColor: 'rgba(251,113,133,0.08)' }
+                  : { backgroundColor: i % 2 === 1 ? 'var(--color-card-alt)' : 'var(--color-card)' }}
               >
                 <td className="px-2 py-1.5 font-medium whitespace-nowrap text-ink">
                   {player.Name}
@@ -276,6 +344,11 @@ export default function PlayerPool() {
                   }`}>
                     {player.type === 'hitter' ? 'H' : 'P'}
                   </span>
+                  {tierMap.has(player.PlayerId) && (
+                    <span className="ml-1 text-xs px-1 py-0.5 rounded font-mono text-ink-faint bg-card-alt border border-border-light">
+                      T{tierMap.get(player.PlayerId) + 1}
+                    </span>
+                  )}
                 </td>
                 <td className="px-2 py-1.5 text-ink-muted text-sm">{player.Team || '—'}</td>
                 <td className="px-2 py-1.5 whitespace-nowrap">
@@ -290,6 +363,11 @@ export default function PlayerPool() {
                 }`}>
                   ${player.Dollars.toFixed(1)}
                 </td>
+                {showDrafted && (
+                  <td className="px-2 py-1.5 text-right font-mono text-ink-muted">
+                    {isDrafted ? `$${picksMap.get(player.PlayerId)?.price ?? '—'}` : <span className="text-ink-faint">—</span>}
+                  </td>
+                )}
                 <td className="px-2 py-1.5">
                   {(() => {
                     const dollarRank = dollarRanks.get(player.PlayerId);
@@ -311,18 +389,21 @@ export default function PlayerPool() {
                   </td>
                 ))}
                 <td className="px-2 py-1.5 text-right">
-                  <button
-                    onClick={() => setDraftTarget(player)}
-                    className="px-2.5 py-0.5 text-xs bg-accent text-surface rounded hover:opacity-90 transition-opacity font-semibold"
-                  >
-                    Draft
-                  </button>
+                  {!isDrafted && (
+                    <button
+                      onClick={() => setDraftTarget(player)}
+                      className="px-2.5 py-0.5 text-xs bg-accent text-surface rounded hover:opacity-90 transition-opacity font-semibold"
+                    >
+                      Draft
+                    </button>
+                  )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
             {availablePlayers.length === 0 && (
               <tr>
-                <td colSpan={5 + statCols.length + 1} className="px-4 py-8 text-center text-ink-muted text-sm">
+                <td colSpan={5 + statCols.length + 1 + (showDrafted ? 1 : 0)} className="px-4 py-8 text-center text-ink-muted text-sm">
                   No players match the current filters.
                 </td>
               </tr>
