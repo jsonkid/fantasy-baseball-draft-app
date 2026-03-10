@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { DraftProvider, useDraft } from './context/DraftContext';
 import ConfigPage from './components/ConfigPage';
 import PlayerPool from './components/PlayerPool';
@@ -36,6 +37,25 @@ function NavBar() {
   );
 }
 
+function PlayersTab() {
+  const [tierFilter, setTierFilter] = useState(null);
+
+  function handleTierClick(tier) {
+    setTierFilter(prev =>
+      prev?.pos === tier.pos && prev?.tierIndex === tier.tierIndex ? null : tier
+    );
+  }
+
+  return (
+    <>
+      <Scarcity onTierClick={handleTierClick} activeTier={tierFilter} />
+      <div className="mt-8">
+        <PlayerPool tierFilter={tierFilter} onClearTierFilter={() => setTierFilter(null)} />
+      </div>
+    </>
+  );
+}
+
 function AppContent() {
   const { config, loading, error } = useDraft();
 
@@ -62,14 +82,7 @@ function AppContent() {
       <NavBar />
       <main className="max-w-screen-2xl mx-auto px-4 py-6">
         {(!tab || tab === 'config') && <ConfigPage />}
-        {tab === 'players' && (
-          <>
-            <Scarcity />
-            <div className="mt-8">
-              <PlayerPool />
-            </div>
-          </>
-        )}
+        {tab === 'players' && <PlayersTab />}
         {tab === 'teams' && <TeamSummary />}
         {tab === 'standings' && <Standings />}
       </main>
