@@ -1,12 +1,20 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useDraft } from '../context/DraftContext';
 import { ROSTER_POSITIONS } from '../utils/positions';
+
+// DH inserted between OF and SP; handled separately since pure-DH players occupy UT slots.
+const DISPLAY_POSITIONS = ['C', '1B', '2B', '3B', 'SS', 'OF', 'DH', 'SP', 'RP'];
 import SortTh from './SortTh';
 
 export default function TeamSummary() {
-  const { config, teamRosters, teamBudgets, teamLineups } = useDraft();
-  const [sortCol, setSortCol] = useState('team');
-  const [sortDir, setSortDir] = useState('asc');
+  const { config, picks, teamRosters, teamBudgets, teamLineups } = useDraft();
+  const [sortCol, setSortCol] = useState('surplus');
+  const [sortDir, setSortDir] = useState('desc');
+
+  useEffect(() => {
+    setSortCol('surplus');
+    setSortDir('desc');
+  }, [picks.length]);
 
   function toggleSort(col) {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -22,12 +30,18 @@ export default function TeamSummary() {
       const totalSurplus = roster.reduce((s, p) => s + (p.Dollars - p.price), 0);
 
       const posSurplus = {};
+      const posCount = {};
       for (const pos of ROSTER_POSITIONS) {
         const assigned = lineup.assignments.filter(a => a.slot === pos);
+        posCount[pos] = assigned.length;
         posSurplus[pos] = assigned.reduce((s, a) => s + (a.player.Dollars - a.player.price), 0);
       }
+      // DH: pure DH-only players on the roster (positions array is exactly ['DH'])
+      const dhPlayers = roster.filter(p => p.positions.length === 1 && p.positions[0] === 'DH');
+      posCount['DH'] = dhPlayers.length;
+      posSurplus['DH'] = dhPlayers.reduce((s, p) => s + (p.Dollars - p.price), 0);
 
-      return { name, budget, rosterCount: roster.length, totalSurplus, posSurplus };
+      return { name, budget, rosterCount: roster.length, totalSurplus, posSurplus, posCount };
     });
   }, [config, teamRosters, teamBudgets, teamLineups]);
 
@@ -77,7 +91,7 @@ export default function TeamSummary() {
               <Th col="budget"  label="$ Left"  />
               <Th col="players" label="Players" />
               <Th col="surplus" label="Value" />
-              {ROSTER_POSITIONS.map(pos => <Th key={pos} col={pos} label={pos} />)}
+              {DISPLAY_POSITIONS.map(pos => <Th key={pos} col={pos} label={pos} />)}
             </tr>
           </thead>
           <tbody>
@@ -91,12 +105,14 @@ export default function TeamSummary() {
                 <td className={`px-3 py-2 text-right font-mono font-semibold ${surplusColor(row.totalSurplus)}`}>
                   {row.totalSurplus >= 0 ? '+' : ''}${row.totalSurplus.toFixed(0)}
                 </td>
-                {ROSTER_POSITIONS.map(pos => {
+                {DISPLAY_POSITIONS.map(pos => {
                   const v = row.posSurplus[pos];
-                  const hasPlayer = row.rosterCount > 0;
+                  const n = row.posCount[pos];
                   return (
-                    <td key={pos} className={`px-3 py-2 text-right font-mono text-sm ${hasPlayer ? surplusColor(v) : 'text-ink-faint'}`}>
-                      {hasPlayer ? `${v >= 0 ? '+' : ''}$${v.toFixed(0)}` : '—'}
+                    <td key={pos} className={`px-3 py-2 text-right font-mono text-sm ${n > 0 ? surplusColor(v) : 'text-ink-faint'}`}>
+                      {n > 0
+                        ? <>{v >= 0 ? '+' : ''}${v.toFixed(0)} <span className="text-xs">({n})</span></>
+                        : '—'}
                     </td>
                   );
                 })}
