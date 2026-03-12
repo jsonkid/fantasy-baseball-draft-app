@@ -1,12 +1,17 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useDraft } from '../context/DraftContext';
 import { STAT_CATEGORIES } from '../utils/standingsCalc';
 import SortTh from './SortTh';
 
 export default function Standings() {
-  const { standings, config } = useDraft();
+  const { standings, config, picks } = useDraft();
   const [sortCol, setSortCol] = useState('avgStanding');
   const [sortDir, setSortDir] = useState('asc');
+
+  useEffect(() => {
+    setSortCol('avgStanding');
+    setSortDir('asc');
+  }, [picks.length]);
 
   function toggleSort(col) {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
