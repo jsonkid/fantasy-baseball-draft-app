@@ -37,20 +37,36 @@ function NavBar() {
   );
 }
 
+const PITCHER_POSITIONS = new Set(['SP', 'RP']);
+
 function PlayersTab() {
   const [tierFilter, setTierFilter] = useState(null);
+  const { dispatch } = useDraft();
 
   function handleTierClick(tier) {
-    setTierFilter(prev =>
-      prev?.pos === tier.pos && prev?.tierIndex === tier.tierIndex ? null : tier
-    );
+    const isToggleOff = tierFilter?.pos === tier.pos && tierFilter?.tierIndex === tier.tierIndex;
+    if (isToggleOff) {
+      setTierFilter(null);
+      dispatch({ type: 'SET_POSITION_FILTER', payload: 'ALL' });
+      dispatch({ type: 'SET_TYPE_FILTER', payload: 'ALL' });
+    } else {
+      setTierFilter(tier);
+      dispatch({ type: 'SET_POSITION_FILTER', payload: tier.pos });
+      dispatch({ type: 'SET_TYPE_FILTER', payload: PITCHER_POSITIONS.has(tier.pos) ? 'pitchers' : 'batters' });
+    }
+  }
+
+  function handleClearTierFilter() {
+    setTierFilter(null);
+    dispatch({ type: 'SET_POSITION_FILTER', payload: 'ALL' });
+    dispatch({ type: 'SET_TYPE_FILTER', payload: 'ALL' });
   }
 
   return (
     <>
       <Scarcity onTierClick={handleTierClick} activeTier={tierFilter} />
       <div className="mt-8">
-        <PlayerPool tierFilter={tierFilter} onClearTierFilter={() => setTierFilter(null)} />
+        <PlayerPool tierFilter={tierFilter} onClearTierFilter={handleClearTierFilter} />
       </div>
     </>
   );

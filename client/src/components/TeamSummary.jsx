@@ -67,7 +67,8 @@ export default function TeamSummary() {
 
   return (
     <div>
-      <h2 className="text-xl font-bold mb-4">Team Summary</h2>
+      <h2 className="text-xl font-bold mb-1">Team Summary</h2>
+      <p className="text-sm text-ink-muted mb-4">Remaining budget, roster size, and projected value (projected $ minus price paid) by team and position.</p>
       <div className="overflow-x-auto border border-border rounded-lg bg-card">
         <table className="w-full text-sm border-collapse">
           <thead>
